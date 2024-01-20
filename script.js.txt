@@ -1,0 +1,122 @@
+// Firebase configuration (replace with your Firebase project credentials)
+const firebaseConfig = {
+  apiKey: "AIzaSyDZvu9uaXpkJAX7HVLaXqh3uV4eJAzOPMU",
+  authDomain: "talal-almegrins-project.firebaseapp.com",
+  projectId: "talal-almegrins-project",
+  storageBucket: "talal-almegrins-project.appspot.com",
+  messagingSenderId: "710998307084",
+  appId: "1:710998307084:web:b08038984fd476b0165929"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+
+// Initialize Vue app with Vuetify
+new Vue({
+  el: '#app',
+  vuetify: new Vuetify(),
+  data: {
+    user: null,
+    usernameInput: '',
+    skillInput: '',
+    skillDescription: '',
+    requestInput: '',
+    skills: [],
+    messages: [],
+    currentChatUser: null,
+    newMessage: ''
+  },
+  created() {
+    // Listen for authentication state changes
+    firebase.auth().onAuthStateChanged(user => {
+      this.user = user;
+      if (user) {
+        // Load skills and messages when user is authenticated
+        this.loadSkills();
+        this.loadMessages();
+      }
+    });
+  },
+  methods: {
+    // Authentication methods
+    signIn() {
+      firebase.auth().signInAnonymously()
+        .then(() => console.log('Signed in anonymously'))
+        .catch(error => console.error('Error signing in:', error));
+    },
+    signOut() {
+      firebase.auth().signOut()
+        .then(() => console.log('Signed out'))
+        .catch(error => console.error('Error signing out:', error));
+    },
+    // Skill methods
+    addSkill() {
+      if (this.skillInput.trim() !== '' && this.skillDescription.trim() !== '') {
+        firebase.firestore().collection('skills').add({
+          username: this.user.displayName || 'Anonymous',
+          skill: this.skillInput,
+          description: this.skillDescription
+        }).then(() => {
+          this.skillInput = '';
+          this.skillDescription = '';
+        }).catch(error => console.error('Error adding skill:', error));
+      }
+    },
+    removeSkill(skillId) {
+      firebase.firestore().collection('skills').doc(skillId).delete()
+        .catch(error => console.error('Error removing skill:', error));
+    },
+    loadSkills() {
+      firebase.firestore().collection('skills').onSnapshot(snapshot => {
+        this.skills = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      });
+    },
+    // Request methods
+    requestSkill() {
+      if (this.requestInput.trim() !== '') {
+        const matchingSkills = this.skills.filter(skill =>
+          skill.skill.toLowerCase().includes(this.requestInput.toLowerCase())
+        );
+
+        if (matchingSkills.length > 0) {
+          const randomIndex = Math.floor(Math.random() * matchingSkills.length);
+          const matchingSkill = matchingSkills[randomIndex];
+          alert(`Matching Skill Found:\n${matchingSkill.username} - ${matchingSkill.skill}\n${matchingSkill.description}`);
+        } else {
+          alert(`No matching skills found for: ${this.requestInput}`);
+        }
+
+        this.requestInput = '';
+      }
+    },
+    // Messaging methods
+    startChat(user) {
+      this.currentChatUser = user;
+      this.loadMessages();
+    },
+    sendMessage() {
+      if (this.newMessage.trim() !== '' && this.currentChatUser) {
+        firebase.firestore().collection('messages').add({
+          sender: this.user.displayName || 'Anonymous',
+          receiver: this.currentChatUser.username,
+          text: this.newMessage,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(() => {
+          this.newMessage = '';
+          this.loadMessages();
+        }).catch(error => console.error('Error sending message:', error));
+      }
+    },
+    loadMessages() {
+      if (this.currentChatUser) {
+        firebase.firestore().collection('messages')
+          .where('sender', 'in', [this.user.displayName, this.currentChatUser.username])
+          .where('receiver', 'in', [this.user.displayName, this.currentChatUser.username])
+          .orderBy('timestamp')
+          .onSnapshot(snapshot => {
+            this.messages = snapshot.docs.map(doc => doc.data());
+          });
+      }
+    }
+  }
+});
